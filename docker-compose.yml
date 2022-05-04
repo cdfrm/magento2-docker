@@ -1,0 +1,70 @@
+version: "3.5"
+
+services:
+  nginx:
+    image: nginx:latest
+    container_name: nginx
+    restart: always
+    ports:
+      - "80:80"
+    volumes:
+      - "./config/nginx/:/etc/nginx/conf.d/"
+      - "./logs/nginx/:/var/log/nginx/"
+      - "./htdocs/:/var/www/"
+
+  php:
+    container_name: php
+    restart: always
+    build:
+      context: ./build
+      dockerfile: php.Dockerfile
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - "./htdocs/:/var/www/"
+      - "./config/php/php.ini:/usr/local/etc/php/php.ini"
+
+  mysql:
+    image: mysql:8.0
+    container_name: mysql
+    restart: always
+    cap_add:
+      - SYS_NICE
+    environment:
+      MYSQL_ALLOW_EMPTY_PASSWORD: "false"
+      MYSQL_ROOT_PASSWORD: "root"
+    volumes:
+      - "./data/mysql/:/var/lib/mysql/"
+      - "./config/mysql/:/etc/mysql/conf.d"
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: phpmyadmin
+    restart: always
+    ports:
+      - "8080:80"
+    environment:
+      PMA_HOST: mysql
+      PMA_USER: root
+      PMA_PASSWORD: root
+
+  elasticsearch:
+    container_name: elasticsearch
+    build:
+      context: ./build
+      dockerfile: elastic.Dockerfile
+    restart: always
+    environment:
+      - discovery.type=single-node
+    ports:
+      - "9200:9200"
+    volumes:
+      - "./data/elasticsearch/:/usr/share/elasticsearch/data/"
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:7.9.3
+    container_name: kibana
+    ports:
+      - '5601:5601'
+    environment:
+      ELASTICSEARCH_HOSTS: '["http://elasticsearch:9200"]'
