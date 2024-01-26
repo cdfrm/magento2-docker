@@ -1,10 +1,15 @@
-FROM php:7.4-fpm
+FROM php:8.1-fpm
 
-ARG USERNAME=magento
-ARG USER_UID=1000
-ARG USER_GID=$USER_UID
+USER root
 
 WORKDIR /var/www
+
+ENV TIDEWAYS_APIKEY=i7336kfWfK8vHwlA
+ENV TIDEWAYS_SERVICE=app
+ENV TIDEWAYS_SAMPLERATE=25
+ENV TIDEWAYS_CONNECTION=tcp://tideways-daemon:9135
+
+ARG DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y \
     libfreetype6-dev \
@@ -16,7 +21,8 @@ RUN apt-get update && apt-get install -y \
     libxslt-dev \
     libzip-dev \
     libmcrypt-dev \
-    git vim unzip cron sudo \
+    libssl-dev \
+    git vim unzip cron sudo openssh-server openssl \
     --no-install-recommends
 
 RUN docker-php-ext-configure gd --with-jpeg=/usr/include \
@@ -37,40 +43,31 @@ RUN docker-php-ext-install -j$(nproc) \
     sockets \
     sodium
 
-RUN pecl install -o xdebug \
-    && docker-php-ext-enable xdebug
-
-RUN pecl install mcrypt-1.0.4 && docker-php-ext-enable mcrypt
-
-RUN curl -fSL 'http://downloads3.ioncube.com/loader_downloads/ioncube_loaders_lin_x86-64.tar.gz' -o ioncube.tar.gz \
-    && mkdir -p ioncube \
-    && tar -xf ioncube.tar.gz -C ioncube --strip-components=1 \
-    && rm ioncube.tar.gz \
-    && export PHP_EXT_DIR=$(php-config --extension-dir) \
-    && export PHP_VERSION=$(php -r "echo PHP_MAJOR_VERSION.'.'.PHP_MINOR_VERSION;") \
-    && mv ioncube/ioncube_loader_lin_${PHP_VERSION}.so "${PHP_EXT_DIR}/ioncube.so" \
-    && rm -r ioncube \
-    && docker-php-ext-enable ioncube
-
 # Install Composer
 RUN curl https://getcomposer.org/composer-2.phar -o composer \
     && mv composer /usr/local/bin/composer && chmod 755 /usr/local/bin/composer
 
 # Install NodeJS
-RUN curl -sL https://deb.nodesource.com/setup_16.x | bash - \
+RUN curl -sL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y nodejs
+    
+RUN curl -sS https://get.symfony.com/cli/installer | bash - \
 
-RUN groupadd --gid $USER_GID $USERNAME \
-    && useradd -s /bin/bash --uid $USER_UID --gid $USER_GID -m $USERNAME \
-    && apt-get update \
-    && apt-get install -y sudo wget \
-    && echo $USERNAME ALL=\(root\) NOPASSWD:ALL > /etc/sudoers.d/$USERNAME \
-    && chmod 0440 /etc/sudoers.d/$USERNAME
+    &&  mv /root/.symfony5/bin/symfony /usr/local/bin/symfony && chmod 755 /usr/local/bin/symfony
+
+RUN git config --global user.email "daipham31@outlook.com" \ 
+    && git config --global user.name "Dai Pham"
 
 RUN apt-get autoremove -y \
     && apt-get clean -y \
     && rm -r /var/lib/apt/lists/*
-
-USER $USERNAME
+    
+RUN apt-get update -yq && \
+    apt-get install -yq --no-install-recommends gpg wget ca-certificates && \
+    echo 'deb [signed-by=/usr/share/keyrings/tideways.gpg] https://packages.tideways.com/apt-packages-main any-version main' | tee /etc/apt/sources.list.d/tideways.list && \
+    wget -qO - 'https://packages.tideways.com/key.gpg' | gpg --dearmor > /usr/share/keyrings/tideways.gpg && \
+    apt-get update -yq && \
+    apt-get install -yq tideways-php && \
+    apt-get clean -yq
 
 CMD ["php-fpm"]
